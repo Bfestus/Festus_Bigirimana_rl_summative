@@ -1,0 +1,28 @@
+# Core RL and ML libraries
+gymnasium>=0.28.1
+stable-baselines3>=2.0.0
+torch>=2.0.0
+tensorboard>=2.13.0
+
+# Visualization and rendering
+pygame>=2.5.0
+matplotlib>=3.7.0
+opencv-python>=4.8.0
+Pillow>=10.0.0
+
+# Data handling and utilities  
+numpy>=1.24.0
+pandas>=2.0.0
+seaborn>=0.12.0
+
+# Video recording
+imageio>=2.31.0
+imageio-ffmpeg>=0.4.8
+
+# Development tools
+jupyter>=1.0.0
+tqdm>=4.65.0
+
+# Optional advanced visualization (uncomment if using)
+# pybullet>=3.2.5
+# panda3d>=1.10.13
