@@ -3,7 +3,8 @@
 This project implements and compares four reinforcement learning algorithms (DQN, PPO, A2C, REINFORCE) for an autonomous drone rescue mission in a custom simulated environment. The drone agent must efficiently locate and assist survivors while managing battery life and avoiding obstacles.
 ## Environment visualization
 Here is GIF:
-![random_agent_demo](https://github.com/user-attachments/assets/643cbf55-0fdf-454c-9549-761c00343006)
+
+![rescue_all_agent_demo](https://github.com/user-attachments/assets/d81054f3-9bcd-4435-bd1c-c393a2d113a1)
 
 ## Features
 - Custom OpenAI Gym environment for drone rescue
