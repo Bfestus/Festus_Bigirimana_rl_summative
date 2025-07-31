@@ -56,7 +56,7 @@ class DroneRescueEvaluator:
             return None
 
     def record_algorithm(self, algo_name, episodes=3):
-        """Record algorithm performance with enhanced visualization"""
+        """Record algorithm performance with minimal overlays and environment-matching colors"""
         print(f"\n🎥 Recording {algo_name} performance...")
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -81,21 +81,12 @@ class DroneRescueEvaluator:
                 while True:
                     frame = self.env.render()
                     if frame is not None:
-                        h, w = frame.shape[:2]
+                        # Convert RGB (pygame) to BGR (cv2)
+                        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                        h, w = frame_bgr.shape[:2]
                         if video is None:
                             video = cv2.VideoWriter(video_path, fourcc, fps, (w, h))
-                        
-                        # Add status overlay
-                        cv2.putText(frame, f"{algo_name} - Episode {ep+1}/{episodes}", 
-                                  (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                        cv2.putText(frame, f"Battery: {state[2]:.1f}%", 
-                                  (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                        cv2.putText(frame, f"Survivors: {state[3]}/{state[4]}", 
-                                  (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                        cv2.putText(frame, f"Reward: {episode_reward:.1f}", 
-                                  (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                        
-                        video.write(frame)
+                        video.write(frame_bgr)
                     
                     action = self.get_action(model, state, algo_name)
                     if action is None:
@@ -106,25 +97,12 @@ class DroneRescueEvaluator:
                     
                     if next_state[3] > state[3]:
                         survivors_found += 1
-                        if frame is not None:
-                            cv2.putText(frame, "SURVIVOR FOUND!", (w//4, h//2),
-                                      cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
-                            for _ in range(fps):
-                                video.write(frame)
+                        # No overlays, just raw environment visuals
                     
                     state = next_state
                     
                     if done or truncated:
                         total_survivors += survivors_found
-                        if frame is not None:
-                            cv2.putText(frame, f"Episode {ep+1} Complete!", 
-                                      (w//4, h//2-40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                            cv2.putText(frame, f"Survivors Found: {survivors_found}", 
-                                      (w//4, h//2), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                            cv2.putText(frame, f"Total Reward: {episode_reward:.1f}",
-                                      (w//4, h//2+40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                            for _ in range(2*fps):
-                                video.write(frame)
                         break
                 
                 time.sleep(0.5)
@@ -173,7 +151,7 @@ class DroneRescueEvaluator:
                     next_state, reward, done, truncated, _ = self.env.step(action)
                     ep_reward += reward
                     steps += 1
-                    
+
                     if done or truncated:
                         metrics[algo]["survivors_found"].append(next_state[3])
                         metrics[algo]["episode_rewards"].append(ep_reward)
@@ -223,7 +201,14 @@ class DroneRescueEvaluator:
                        f"(±{np.std(data['steps_taken']):.1f})\n")
 
     def _plot_performance_comparison(self, metrics):
-        """Generate performance comparison plots"""
+        """Generate performance comparison plots with environment-matching colors"""
+        # Colors from environment
+        env_colors = {
+            "DQN": (30/255, 60/255, 200/255),
+            "PPO": (0/255, 200/255, 0/255),
+            "A2C": (220/255, 40/255, 40/255),
+            "REINFORCE": (255/255, 220/255, 0/255)
+        }
         metrics_to_plot = {
             "Survivors Found": "survivors_found",
             "Episode Rewards": "episode_rewards",
@@ -236,7 +221,9 @@ class DroneRescueEvaluator:
         
         for (title, metric), ax in zip(metrics_to_plot.items(), axes.flat):
             data = [metrics[algo][metric] for algo in metrics.keys()]
-            ax.boxplot(data, labels=list(metrics.keys()))
+            box = ax.boxplot(data, patch_artist=True, labels=list(metrics.keys()))
+            for patch, algo in zip(box['boxes'], metrics.keys()):
+                patch.set_facecolor(env_colors[algo])
             ax.set_title(title)
             ax.grid(True, linestyle='--', alpha=0.7)
             ax.tick_params(axis='both', which='major', labelsize=10)

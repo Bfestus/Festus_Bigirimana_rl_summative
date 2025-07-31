@@ -59,8 +59,8 @@ class EmergencyDroneEnv(gym.Env):
         self.scanned_areas = set()  # Areas that have been scanned
         self.steps_taken = 0
         self.max_steps = 500
-        self.battery_critical = 30  # New: Critical battery threshold
-        self.movement_reward = -0.1  # New: Base movement cost
+        self.battery_critical = 30  # Critical battery threshold
+        self.movement_reward = -0.1  # Base movement cost
 
         # Mission parameters
         self.num_survivors = random.randint(10, 15)  # Random number of survivors
@@ -249,77 +249,150 @@ class EmergencyDroneEnv(gym.Env):
             return self._render_frame()
 
     def _render_frame(self):
-        """Render current frame using pygame"""
+        """Render current frame using pygame with advanced fake 3D (isometric) visualization"""
         if self.window is None:
             pygame.init()
             pygame.display.init()
             self.window = pygame.display.set_mode((self.window_size, self.window_size))
-            pygame.display.set_caption("Emergency Drone - Festus Bigirimana")
+            pygame.display.set_caption("Emergency Drone - Festus Bigirimana (Fake 3D)")
         if self.clock is None:
             self.clock = pygame.time.Clock()
 
         # Colors
-        WHITE = (255, 255, 255)
+        SKY = (135, 206, 235)
+        GROUND = (120, 180, 90)
+        GRID = (80, 120, 60)
+        SHADOW = (60, 60, 60, 80)
+        DRONE_BODY = (60, 60, 60)
+        DRONE_ARM = (120, 120, 120)
+        PROPELLER = (180, 180, 180)
+        DRONE_HIGHLIGHT = (30, 60, 200)
+        BASE = (0, 200, 0)
+        BASE_TOP = (0, 255, 100)
+        RED = (220, 40, 40)
+        YELLOW = (255, 220, 0)
         BLACK = (0, 0, 0)
-        BLUE = (0, 0, 255)      # Drone
-        GREEN = (0, 255, 0)     # Base
-        RED = (255, 0, 0)       # Survivors
-        YELLOW = (255, 255, 0)  # Found survivors
-        GRAY = (128, 128, 128)  # Scanned areas
+        WHITE = (255, 255, 255)
+        GRAY = (128, 128, 128, 80)
 
-        # Clear screen
-        self.window.fill(WHITE)
+        # Helper for isometric projection
+        def iso(x, y, z=0):
+            scale = self.window_size // (self.grid_size + 2)
+            iso_x = int((x - y) * scale * 0.7 + self.window_size // 2)
+            iso_y = int((x + y) * scale * 0.35 - z * scale * 0.7 + self.window_size // 4)
+            return (iso_x, iso_y)
 
-        # Calculate cell size
-        cell_size = self.window_size // self.grid_size
+        # Fill sky
+        self.window.fill(SKY)
 
-        # Draw grid
-        for x in range(self.grid_size + 1):
-            pygame.draw.line(self.window, BLACK, 
-                           (x * cell_size, 0), 
-                           (x * cell_size, self.window_size))
-        for y in range(self.grid_size + 1):
-            pygame.draw.line(self.window, BLACK, 
-                           (0, y * cell_size), 
-                           (self.window_size, y * cell_size))
+        # Draw ground tiles (isometric)
+        for x in range(self.grid_size):
+            for y in range(self.grid_size):
+                pts = [
+                    iso(x, y),
+                    iso(x+1, y),
+                    iso(x+1, y+1),
+                    iso(x, y+1)
+                ]
+                pygame.draw.polygon(self.window, GROUND, pts)
+                pygame.draw.polygon(self.window, GRID, pts, 1)
 
-        # Draw scanned areas
+        # Draw scanned areas (semi-transparent overlay)
+        scan_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
         for pos in self.scanned_areas:
-            rect = pygame.Rect(pos[0] * cell_size, pos[1] * cell_size, 
-                             cell_size, cell_size)
-            pygame.draw.rect(self.window, GRAY, rect)
+            x, y = pos
+            pts = [
+                iso(x, y),
+                iso(x+1, y),
+                iso(x+1, y+1),
+                iso(x, y+1)
+            ]
+            pygame.draw.polygon(scan_surface, GRAY, pts)
+        self.window.blit(scan_surface, (0, 0))
 
-        # Draw base
-        base_rect = pygame.Rect(self.base_pos[0] * cell_size, 
-                               self.base_pos[1] * cell_size, 
-                               cell_size, cell_size)
-        pygame.draw.rect(self.window, GREEN, base_rect)
+        # Draw base as a raised isometric cylinder
+        bx, by = self.base_pos
+        base_pts = [
+            iso(bx, by, 0.2),
+            iso(bx+1, by, 0.2),
+            iso(bx+1, by+1, 0.2),
+            iso(bx, by+1, 0.2)
+        ]
+        pygame.draw.polygon(self.window, BASE_TOP, base_pts)
+        pygame.draw.polygon(self.window, BASE, [iso(bx, by), iso(bx+1, by), iso(bx+1, by+1), iso(bx, by+1)])
+        # Draw H
+        font = pygame.font.Font(None, 24)
+        h_text = font.render("H", True, BLACK)
+        h_pos = iso(bx+0.5, by+0.5, 0.25)
+        self.window.blit(h_text, (h_pos[0]-8, h_pos[1]-12))
 
-        # Draw survivors
+        # Draw survivors as isometric stick figures with shadows
         for survivor_pos in self.survivors:
             color = YELLOW if survivor_pos in self.found_survivors else RED
-            center = (survivor_pos[0] * cell_size + cell_size // 2,
-                     survivor_pos[1] * cell_size + cell_size // 2)
-            pygame.draw.circle(self.window, color, center, cell_size // 3)
+            sx, sy = survivor_pos
+            center = iso(sx+0.5, sy+0.5, 0.15)
+            # Draw survivor shadow
+            survivor_shadow = pygame.Surface((28, 12), pygame.SRCALPHA)
+            pygame.draw.ellipse(survivor_shadow, SHADOW, (0, 0, 28, 12))
+            self.window.blit(survivor_shadow, (center[0]-14, center[1]+28))
+            # Head
+            pygame.draw.circle(self.window, color, center, 10)
+            # Body
+            pygame.draw.line(self.window, color, (center[0], center[1]+10), (center[0], center[1]+28), 3)
+            # Arms
+            pygame.draw.line(self.window, color, (center[0]-8, center[1]+18), (center[0]+8, center[1]+18), 3)
+            # Legs
+            pygame.draw.line(self.window, color, (center[0], center[1]+28), (center[0]-7, center[1]+38), 3)
+            pygame.draw.line(self.window, color, (center[0], center[1]+28), (center[0]+7, center[1]+38), 3)
 
-        # Draw drone
-        drone_center = (self.drone_pos[0] * cell_size + cell_size // 2,
-                       self.drone_pos[1] * cell_size + cell_size // 2)
-        pygame.draw.circle(self.window, BLUE, drone_center, cell_size // 2)
+        # Draw drone shadow
+        dx, dy = self.drone_pos
+        drone_center = iso(dx+0.5, dy+0.5, 0.18)
+        shadow_surface = pygame.Surface((40, 20), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow_surface, SHADOW, (0, 0, 40, 20))
+        self.window.blit(shadow_surface, (drone_center[0]-20, drone_center[1]+18))
 
-        # Draw battery indicator
+        # Draw drone as isometric quadcopter
+        # Body
+        pygame.draw.ellipse(self.window, DRONE_BODY, (drone_center[0]-12, drone_center[1]-10, 24, 20))
+        # Arms and propellers
+        for angle in [45, 135, 225, 315]:
+            rad = np.deg2rad(angle)
+            arm_end = (int(drone_center[0] + np.cos(rad) * 18), int(drone_center[1] + np.sin(rad) * 8))
+            pygame.draw.line(self.window, DRONE_ARM, drone_center, arm_end, 4)
+            pygame.draw.circle(self.window, PROPELLER, arm_end, 5)
+        # Highlight
+        pygame.draw.ellipse(self.window, DRONE_HIGHLIGHT, (drone_center[0]-6, drone_center[1]-5, 12, 10))
+
+        # Draw scan radius (isometric, semi-transparent)
+        scan_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
+        for r in range(1, self.scan_radius+1):
+            for dx_scan in range(-r, r+1):
+                for dy_scan in range(-r, r+1):
+                    if abs(dx_scan) + abs(dy_scan) == r:
+                        scan_tile = (dx+dx_scan, dy+dy_scan)
+                        if 0 <= scan_tile[0] < self.grid_size and 0 <= scan_tile[1] < self.grid_size:
+                            pts = [
+                                iso(scan_tile[0], scan_tile[1], 0.01),
+                                iso(scan_tile[0]+1, scan_tile[1], 0.01),
+                                iso(scan_tile[0]+1, scan_tile[1]+1, 0.01),
+                                iso(scan_tile[0], scan_tile[1]+1, 0.01)
+                            ]
+                            pygame.draw.polygon(scan_surface, (0, 0, 255, 30), pts)
+        self.window.blit(scan_surface, (0, 0))
+
+        # Draw battery indicator (3D style)
         battery_width = int((self.battery / 100) * 100)
-        battery_rect = pygame.Rect(10, 10, battery_width, 20)
-        pygame.draw.rect(self.window, GREEN if self.battery > 30 else RED, battery_rect)
+        pygame.draw.rect(self.window, (40, 180, 40), (10, 10, battery_width, 20))
+        pygame.draw.rect(self.window, BLACK, (10, 10, 100, 20), 2)
+        pygame.draw.rect(self.window, (100, 100, 100), (110, 14, 8, 12))
 
         # Add text labels
         font = pygame.font.Font(None, 24)
         battery_text = font.render(f"Battery: {self.battery:.1f}%", True, BLACK)
         self.window.blit(battery_text, (10, 35))
-
         survivors_text = font.render(f"Survivors: {len(self.found_survivors)}/{len(self.survivors)}", True, BLACK)
         self.window.blit(survivors_text, (10, 55))
-
         steps_text = font.render(f"Steps: {self.steps_taken}", True, BLACK)
         self.window.blit(steps_text, (10, 75))
 
